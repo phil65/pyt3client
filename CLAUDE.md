@@ -18,7 +18,8 @@ code is TypeScript built on Effect.
 | `src/pyt3client/client.py` | `T3Client`: typed `call(spec, params)`, `call_raw`, `wait_for_thread`, `list_tools`. |
 | `src/pyt3client/tool.py` | `ToolSpec[In, Out]` and `JsonOutput`. |
 | `src/pyt3client/cli/` | `pyt3` CLI (typer, `cli` extra; never imported by the library). Tests inject a transport via `Runtime` as `obj=`. |
-| `src/pyt3client/credentials.py` | Saved sign-ins (`pyt3 login`): `load()`, `select()`, `save()`, `is_expired()`; no typer, so library users such as agentpool can read them. |
+| `src/pyt3client/credentials.py` | Saved sign-ins (`pyt3 login`): `load()`, `select()`, `save()`, `is_expired()`; native ones (`pyt3 login-native`) in `load_native()` / `save_native()` under the same aliases. No typer, so library users such as agentpool can read them. |
+| `src/pyt3client/native/` | Native WebSocket RPC (`native` extra): `sign_in_native()`, `websocket_url()`, `RpcSocket` (Effect RPC framing), `T3NativeClient` (`subscribe_thread`, `dispatch`, `respond_to_request`), hand-written stream models. |
 | `src/pyt3client/models/tools.py` | **Generated.** Input/output models + one `ToolSpec` constant per tool. Do not edit. |
 | `src/pyt3client/models/{auth,environment}.py` | Hand-written mirrors of upstream contracts. |
 | `schemas/mcp_tools.json` | Snapshot of a real server's `tools/list` (input + output JSON Schemas). |
@@ -67,7 +68,7 @@ the subscription, agent turns cost nothing extra, so tests may run real turns.
 1. **`/mcp` (used here).** MCP over Streamable HTTP plus OAuth 2.1. It's the
    supported route for outside agents. User docs: `docs/user/outside-agents.md`.
    Tool reference: `docs/orchestration-v2/orchestrator-mcp-server.md`.
-2. **Native RPC (not implemented).** This is what web, desktop and mobile use.
+2. **Native RPC (`pyt3client.native`).** This is what web, desktop and mobile use.
    REST lives under `/api` (`packages/contracts/src/environmentHttp.ts`). The
    WebSocket is Effect RPC at `/ws?orchestrationProtocol=2&wsTicket=…` with JSON
    frames:
@@ -82,8 +83,21 @@ the subscription, agent turns cost nothing extra, so tests may run real turns.
    `subject_token_type=urn:t3:params:oauth:token-type:environment-bootstrap`) →
    bearer → `POST /api/auth/websocket-ticket` → socket. A working end-to-end
    example is `apps/server/scripts/verify-background-live.ts`. **An MCP token
-   (subject `mcp-client`) is rejected on this surface**, so a native client
-   needs its own pairing.
+   (subject `mcp-client`) is rejected on this surface, and a native bearer on
+   `/mcp`**, so a client of both holds two sign-ins.
+
+   Remote clients exchange a one-time pairing *token* (`t3 auth pairing create`;
+   not the MCP pairing code) the same way (upstream
+   `packages/client-runtime/src/authorization/remote.ts`,
+   `bootstrapRemoteBearerSession`). Found live (2026-11-22):
+   - The stream is `snapshot`, then `event`s; `turn-item.updated` carries whole
+     items. Long assistant and reasoning texts grow in place (`streaming: true`,
+     updates about 0.5 s apart). Over `/mcp` the same message only shows once done.
+   - Approvals: an `approval_request` item (`status: waiting`, `requestId`,
+     `requestKind`, `prompt`) plus `runtime-request.updated`. Answer with the
+     `runtime-request.respond` command (`decision`) via `dispatchCommand`.
+   - Read-only commands (`ls`) need no approval even in `approval-required`.
+   - Ack every `Chunk`; the server waits for it before sending more.
 
 ### Sign-in (`auth.py`)
 

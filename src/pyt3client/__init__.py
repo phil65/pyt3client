@@ -27,9 +27,10 @@ from pyt3client.errors import (
     T3HttpError,
     T3McpError,
     T3ProtocolError,
+    T3RpcError,
     T3ToolError,
 )
-from pyt3client.models.auth import T3Credentials
+from pyt3client.models.auth import T3Credentials, T3NativeCredentials
 from pyt3client.models.environment import EnvironmentDescriptor
 from pyt3client.tool import JsonOutput, ToolSpec
 
@@ -51,7 +52,9 @@ __all__ = [
     "T3Error",
     "T3HttpError",
     "T3McpError",
+    "T3NativeCredentials",
     "T3ProtocolError",
+    "T3RpcError",
     "T3ToolError",
     "ToolSpec",
     "__version__",

@@ -61,7 +61,13 @@ from pyt3client.models.tools import (
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
 
-    from pyt3client.models.auth import InteractionMode, McpAccess, RuntimeMode, T3Credentials
+    from pyt3client.models.auth import (
+        InteractionMode,
+        McpAccess,
+        RuntimeMode,
+        T3Credentials,
+        T3NativeCredentials,
+    )
     from pyt3client.models.tools import Item, Project, ThreadReadOutput, ThreadWaitOutput
 
 
@@ -412,6 +418,74 @@ def login(
     )
 
 
+@app.command("login-native")
+def login_native(
+    ctx: typer.Context,
+    url: Annotated[str, typer.Argument(help="Environment address, e.g. https://host:3773.")],
+    pairing_token: Annotated[
+        str, typer.Argument(help="Token from `t3 auth pairing create` (not an MCP code).")
+    ],
+    name: Annotated[
+        str | None,
+        typer.Option(
+            "--name",
+            help="Alias to save it as (default: the MCP sign-in of this URL, or its label).",
+        ),
+    ] = None,
+    client_name: Annotated[
+        str, typer.Option(help="Label the environment shows for this sign-in.")
+    ] = "pyt3",
+    as_json: JsonFlag = False,
+) -> None:
+    """Sign in to the native WebSocket RPC (live streaming, approvals) and save the token.
+
+    The native surface rejects MCP tokens, so this is a second sign-in, kept under the
+    same alias as the environment's MCP one.
+    """
+    from pyt3client.native import sign_in_native
+
+    runtime = _runtime(ctx)
+
+    async def go() -> tuple[str, T3NativeCredentials]:
+        async with runtime.http_client() as http:
+            credentials = await sign_in_native(
+                url, pairing_token, label=client_name, http_client=http
+            )
+            if name is not None:
+                return name, credentials
+            for alias, saved in store.load().items():
+                if saved.base_url == credentials.base_url:
+                    return alias, credentials
+            descriptor = await fetch_descriptor(credentials.base_url, http_client=http)
+        return store.default_alias(descriptor.label, credentials.base_url), credentials
+
+    try:
+        alias, credentials = asyncio.run(go())
+        native = store.load_native()
+    except T3AuthError as error:
+        _fail(f"auth: {error}")
+    except (T3Error, httpx.HTTPError) as error:
+        _fail(f"cannot sign in at {url}: {error}")
+    except store.StoreError as error:
+        _fail(str(error))
+    native[alias] = credentials
+    path = store.save_native(native)
+    if as_json:
+        summary: dict[str, JsonValue] = {
+            "alias": alias,
+            "path": str(path),
+            "url": credentials.base_url,
+            "scopes": list(credentials.scopes),
+            "expiresAt": credentials.expires_at.isoformat(),
+        }
+        _echo_json(summary)
+        return
+    typer.echo(
+        f"Signed in natively to {alias} ({credentials.base_url}),"
+        f" valid until {credentials.expires_at:%Y-%m-%d}."
+    )
+
+
 @app.command()
 def logout(
     ctx: typer.Context,
@@ -428,6 +502,9 @@ def logout(
         _fail(str(error))
     del environments[chosen]
     store.save(environments)
+    native = store.load_native()
+    if native.pop(chosen, None) is not None:
+        store.save_native(native)
     typer.echo(f"Forgot {chosen}. The token stays valid until revoked in T3 Code.")
 
 
@@ -446,10 +523,20 @@ def envs(as_json: JsonFlag = False) -> None:
     """List saved environments (never prints tokens)."""
     try:
         environments = store.load()
+        native = store.load_native()
     except store.StoreError as error:
         _fail(str(error))
     if as_json:
-        _echo_json({alias: _env_summary(creds) for alias, creds in environments.items()})
+        listed: dict[str, JsonValue] = {}
+        for alias, creds in environments.items():
+            summary = _env_summary(creds)
+            if (signed_in := native.get(alias)) is not None:
+                summary["native"] = {
+                    "expiresAt": signed_in.expires_at.isoformat(),
+                    "expired": store.is_expired(signed_in),
+                }
+            listed[alias] = summary
+        _echo_json(listed)
         return
     if not environments:
         typer.echo("No environment saved. Run `pyt3 login <url> <pairing-code>`.")
@@ -460,9 +547,10 @@ def envs(as_json: JsonFlag = False) -> None:
             if store.is_expired(credentials)
             else f"until {credentials.expires_at:%Y-%m-%d}"
         )
+        native_state = "native" if alias in native else "-"
         typer.echo(
             f"{alias}\t{credentials.base_url}\t{credentials.access}\t{state}"
-            f"\t{credentials.environment_id}"
+            f"\t{credentials.environment_id}\t{native_state}"
         )
 
 

@@ -111,3 +111,20 @@ class T3Credentials(BaseModel):
     scopes: tuple[str, ...]
     access: McpAccess
     client_id: str
+
+
+class T3NativeCredentials(BaseModel):
+    """A sign-in for T3 Code's native surface: its WebSocket RPC and REST API.
+
+    That surface is what the web, desktop and mobile clients use. It streams a
+    thread's events as they happen and can answer approvals, which `/mcp` cannot.
+    It rejects MCP tokens, and `/mcp` rejects this one, so a client that uses
+    both holds two sign-ins. Obtained by exchanging a one-time pairing token
+    (`t3 auth pairing create`, or Settings -> Sharing & access) at `/oauth/token`.
+    """
+
+    base_url: str
+    """Environment origin without a trailing slash."""
+    access_token: SecretStr
+    expires_at: datetime
+    scopes: tuple[str, ...]

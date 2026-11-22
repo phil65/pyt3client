@@ -37,6 +37,8 @@ dependencies = [
 [project.optional-dependencies]
 # The `pyt3` command line tool.
 cli = ["typer>=0.12"]
+# The native WebSocket RPC (`pyt3client.native`).
+native = ["websockets>=15"]
 
 [project.scripts]
 pyt3 = "pyt3client.cli:app"

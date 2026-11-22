@@ -13,7 +13,7 @@ from pydantic import SecretStr
 import pytest
 from typer.testing import CliRunner
 
-from pyt3client import credentials as store
+from pyt3client import T3NativeCredentials, credentials as store
 from pyt3client.cli import app
 from pyt3client.cli.app import Runtime
 from pyt3client.models.auth import T3Credentials
@@ -367,3 +367,47 @@ def test_project_paths_are_server_paths(
     else:
         assert result.exit_code == 0, result.output
         assert launches[0]["projectId"] == expected
+
+
+class _NativeTokenServer:
+    """Answers the native token exchange: `NATIVE` is a valid pairing token."""
+
+    def handle(self, request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/oauth/token":
+            if b"subject_token=NATIVE" not in request.content:
+                return httpx.Response(400, json={"error": "invalid_grant"})
+            token = {"access_token": "native-1", "expires_in": 3600, "scope": "orchestration:read"}
+            return httpx.Response(200, json=token)
+        return httpx.Response(404)
+
+
+def test_login_native_joins_the_mcp_sign_in_and_logout_forgets_both(logged_in: Path) -> None:
+    server = _NativeTokenServer()
+    runtime = Runtime(transport=httpx.MockTransport(server.handle))
+    result = CliRunner().invoke(app, ["login-native", BASE_URL, "NATIVE"], obj=runtime)
+    assert result.exit_code == 0, result.output
+    assert "Signed in natively to home" in result.output
+    saved = store.load_native()["home"]
+    assert saved.access_token.get_secret_value() == "native-1"
+    assert store.load()["home"].access_token.get_secret_value() == TOKEN  # Kept
+    listed = json.loads(CliRunner().invoke(app, ["envs", "--json"], obj=runtime).output)
+    assert listed["home"]["native"]["expired"] is False
+    assert "native-1" not in json.dumps(listed)
+    refused = CliRunner().invoke(app, ["login-native", BASE_URL, "USED"], obj=runtime)
+    assert refused.exit_code == 1
+    assert "refused" in refused.stderr
+    assert CliRunner().invoke(app, ["logout", "home"], obj=runtime).exit_code == 0
+    assert store.load() == {}
+    assert store.load_native() == {}
+
+
+def test_saving_mcp_sign_ins_keeps_native_ones(config_home: Path) -> None:
+    native = T3NativeCredentials(
+        base_url=BASE_URL,
+        access_token=SecretStr("n"),
+        expires_at=datetime.now(UTC) + timedelta(days=1),
+        scopes=(),
+    )
+    store.save_native({"home": native})
+    store.save({"home": credentials()})
+    assert store.load_native()["home"].access_token.get_secret_value() == "n"

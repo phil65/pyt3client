@@ -87,3 +87,19 @@ class T3ToolError(T3Error):
         self.tool = tool
         self.code = code
         self.message = message
+
+
+class T3RpcError(T3Error):
+    """A native RPC failed: the server ended the request with a failure, or the socket closed.
+
+    Native RPC is Effect RPC over T3 Code's WebSocket (see `pyt3client.native`). A
+    request that fails ends with an `Exit` whose cause is a typed error (`Fail`, such
+    as `OrchestrationV2DispatchCommandError`), a defect (`Die`) or an interruption.
+    """
+
+    def __init__(self, tag: str, message: str, *, cause: object = None) -> None:
+        super().__init__(f"{tag}: {message}")
+        self.tag = tag
+        self.message = message
+        self.cause = cause
+        """The failure as the server encoded it (JSON), if any."""
