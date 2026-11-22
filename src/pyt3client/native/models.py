@@ -39,6 +39,16 @@ class ApprovalOption(_Open):
     warning: str | None = None
 
 
+class NativeItemRef(_Open):
+    """The provider's own id of what an item stands for (`OrchestrationV2ProviderRef`).
+
+    An approval request shares it with the tool call it is about.
+    """
+
+    driver: str
+    native_id: str
+
+
 class TurnItem(_Open):
     """A timeline row (`OrchestrationV2TurnItem`): a message, reasoning, tool work, a request.
 
@@ -57,6 +67,7 @@ class TurnItem(_Open):
     text: str | None = None
     """Text of message and reasoning items; complete once `streaming` is false."""
     streaming: bool | None = None
+    native_item_ref: NativeItemRef | None = None
     request_id: str | None = None
     """For `approval_request` and `user_input_request`: the runtime request to answer."""
     request_kind: str | None = None
