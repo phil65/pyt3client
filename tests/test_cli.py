@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 import json
+import os
 import stat
 from typing import TYPE_CHECKING, Any
 
@@ -169,7 +170,8 @@ def test_login_saves_owner_only_credentials(config_home: Path) -> None:
     assert result.exit_code == 0, result.output
     assert "Signed in to test" in result.output  # alias from the descriptor label
     path = config_home / "pyt3client" / "credentials.json"
-    assert stat.S_IMODE(path.stat().st_mode) == 0o600
+    if os.name == "posix":  # Windows has no owner-only mode bits; ACLs apply there
+        assert stat.S_IMODE(path.stat().st_mode) == 0o600
     saved = store.load()["test"]
     assert saved.access_token.get_secret_value() == "mcp-token"
     assert saved.environment_id == "env-1"
@@ -338,3 +340,30 @@ def test_pending_lists_questions(logged_in: Path, server: FakeMcpServer) -> None
 def test_logout(logged_in: Path, server: FakeMcpServer) -> None:
     assert invoke(server, "logout").exit_code == 0
     assert store.load() == {}
+
+
+@pytest.mark.parametrize(
+    ("reference", "expected"),
+    [
+        ("c:\\src\\app\\lib", "win"),  # Windows paths compare case-insensitively
+        ("C:\\src\\app", "win"),
+        ("/srv/app/lib", "posix"),
+        ("/src/app", None),  # A POSIX path is never inside a Windows folder
+    ],
+)
+def test_project_paths_are_server_paths(
+    logged_in: Path, server: FakeMcpServer, reference: str, expected: str | None
+) -> None:
+    server.tools["t3_project_list"] = lambda _args: tool_result({
+        "projects": [project("win", "C:\\src\\app"), project("posix", "/srv/app")],
+        "nextCursor": None,
+    })
+    result = invoke(server, "start", reference, "hi")
+    launches = [arguments for name, arguments in server.calls if name == "t3_thread_launch"]
+    if expected is None:
+        assert result.exit_code == 1
+        assert "no project" in result.stderr
+        assert launches == []
+    else:
+        assert result.exit_code == 0, result.output
+        assert launches[0]["projectId"] == expected

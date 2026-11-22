@@ -15,7 +15,7 @@ import asyncio
 from dataclasses import dataclass
 import json
 import os
-from pathlib import Path
+from pathlib import PurePath, PurePosixPath, PureWindowsPath
 import sys
 from typing import TYPE_CHECKING, Annotated, Literal, NoReturn
 
@@ -273,21 +273,38 @@ async def _all_projects(t3: T3Client) -> list[Project]:
         cursor = page.next_cursor.root
 
 
+def _server_path(text: str) -> PurePath | None:
+    r"""`text` as an absolute path of the flavor it is written in, or None if relative.
+
+    `/srv/app` is POSIX; `C:\src\app` and `\\host\share` are Windows paths.
+    """
+    if text.startswith("/"):
+        return PurePosixPath(text)
+    windows = PureWindowsPath(text)
+    return windows if windows.is_absolute() else None
+
+
 async def _resolve_project(t3: T3Client, reference: str) -> str:
     """A project id, or the project whose folder contains the path `reference`.
 
+    Absolute paths are paths on the server's filesystem and are compared as
+    given, POSIX or Windows by their form, whatever this machine runs.
     Relative paths resolve against this shell's directory, which only makes
-    sense when the environment runs on this machine; pass an absolute path
-    on the server's filesystem for a remote one.
+    sense when the environment runs on this machine.
     """
     projects = await _all_projects(t3)
     if any(project.id == reference for project in projects):
         return reference
-    path = Path(os.path.abspath(reference))  # noqa: PTH100 - must not follow symlinks
+    path = _server_path(reference)
+    if path is None:
+        local = os.path.abspath(reference)  # noqa: PTH100 - must not follow symlinks
+        path = _server_path(local) or PurePosixPath(local)
     containing = [
         project
         for project in projects
-        if path == Path(project.workspace_root) or Path(project.workspace_root) in path.parents
+        if (root := _server_path(project.workspace_root)) is not None
+        and type(root) is type(path)
+        and (path == root or root in path.parents)
     ]
     if not containing:
         msg = f"no project with id {reference!r} or containing {path}"
