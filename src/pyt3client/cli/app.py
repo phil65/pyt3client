@@ -23,8 +23,8 @@ import httpx
 from pydantic import BaseModel, JsonValue
 import typer
 
+from pyt3client import credentials as store
 from pyt3client.auth import fetch_descriptor, pair
-from pyt3client.cli import store
 from pyt3client.client import T3Client
 from pyt3client.errors import (
     T3AuthError,

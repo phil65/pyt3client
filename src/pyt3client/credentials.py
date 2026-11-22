@@ -1,4 +1,4 @@
-"""Saved sign-ins for the `pyt3` CLI, one per environment alias.
+"""Saved sign-ins, one per environment alias (written by `pyt3 login`).
 
 The file is `$XDG_CONFIG_HOME/pyt3client/credentials.json` (falling back to
 `~/.config/pyt3client/credentials.json`), readable by the owner only. It holds

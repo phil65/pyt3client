@@ -17,7 +17,8 @@ code is TypeScript built on Effect.
 | `src/pyt3client/mcp.py` | Minimal MCP Streamable HTTP JSON-RPC client (`McpHttpSession`). |
 | `src/pyt3client/client.py` | `T3Client`: typed `call(spec, params)`, `call_raw`, `wait_for_thread`, `list_tools`. |
 | `src/pyt3client/tool.py` | `ToolSpec[In, Out]` and `JsonOutput`. |
-| `src/pyt3client/cli/` | `pyt3` CLI (typer, `cli` extra; never imported by the library). `store.py` holds saved sign-ins; tests inject a transport via `Runtime` as `obj=`. |
+| `src/pyt3client/cli/` | `pyt3` CLI (typer, `cli` extra; never imported by the library). Tests inject a transport via `Runtime` as `obj=`. |
+| `src/pyt3client/credentials.py` | Saved sign-ins (`pyt3 login`): `load()`, `select()`, `save()`, `is_expired()`; no typer, so library users such as agentpool can read them. |
 | `src/pyt3client/models/tools.py` | **Generated.** Input/output models + one `ToolSpec` constant per tool. Do not edit. |
 | `src/pyt3client/models/{auth,environment}.py` | Hand-written mirrors of upstream contracts. |
 | `schemas/mcp_tools.json` | Snapshot of a real server's `tools/list` (input + output JSON Schemas). |

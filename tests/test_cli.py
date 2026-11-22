@@ -12,7 +12,8 @@ from pydantic import SecretStr
 import pytest
 from typer.testing import CliRunner
 
-from pyt3client.cli import app, store
+from pyt3client import credentials as store
+from pyt3client.cli import app
 from pyt3client.cli.app import Runtime
 from pyt3client.models.auth import T3Credentials
 
