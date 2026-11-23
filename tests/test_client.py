@@ -20,7 +20,7 @@ from .conftest import BASE_URL, TOKEN, FakeMcpServer, tool_failure, tool_result
 
 
 if TYPE_CHECKING:
-    import httpx
+    import httpx2
 
 
 THREAD_LIST_RESULT = {
@@ -32,11 +32,11 @@ THREAD_LIST_RESULT = {
 }
 
 
-def make_client(http_client: httpx.AsyncClient, **kwargs: Any) -> T3Client:
+def make_client(http_client: httpx2.AsyncClient, **kwargs: Any) -> T3Client:
     return T3Client(BASE_URL, TOKEN, http_client=http_client, **kwargs)
 
 
-async def test_typed_call(fake_server: FakeMcpServer, http_client: httpx.AsyncClient) -> None:
+async def test_typed_call(fake_server: FakeMcpServer, http_client: httpx2.AsyncClient) -> None:
     fake_server.tools["t3_thread_list"] = lambda _args: tool_result(THREAD_LIST_RESULT)
     async with make_client(http_client) as t3:
         result = await t3.call(THREAD_LIST, ThreadListInput(all_projects=True, limit=5))
@@ -48,7 +48,7 @@ async def test_typed_call(fake_server: FakeMcpServer, http_client: httpx.AsyncCl
     assert fake_server.sessions_opened == 1
 
 
-async def test_sse_responses(fake_server: FakeMcpServer, http_client: httpx.AsyncClient) -> None:
+async def test_sse_responses(fake_server: FakeMcpServer, http_client: httpx2.AsyncClient) -> None:
     fake_server.sse = True
     fake_server.tools["t3_thread_list"] = lambda _args: tool_result(THREAD_LIST_RESULT)
     async with make_client(http_client) as t3:
@@ -56,7 +56,9 @@ async def test_sse_responses(fake_server: FakeMcpServer, http_client: httpx.Asyn
     assert result.total == 0
 
 
-async def test_text_only_result(fake_server: FakeMcpServer, http_client: httpx.AsyncClient) -> None:
+async def test_text_only_result(
+    fake_server: FakeMcpServer, http_client: httpx2.AsyncClient
+) -> None:
     """Tools without an outputSchema answer with a JSON text block only."""
     fake_server.tools["t3_pending_request"] = lambda _args: tool_result(
         {"requests": []}, structured=False
@@ -67,7 +69,7 @@ async def test_text_only_result(fake_server: FakeMcpServer, http_client: httpx.A
 
 
 async def test_tool_refusal_raises_with_code(
-    fake_server: FakeMcpServer, http_client: httpx.AsyncClient
+    fake_server: FakeMcpServer, http_client: httpx2.AsyncClient
 ) -> None:
     fake_server.tools["t3_thread_read"] = lambda _args: tool_failure(
         "thread_not_found", "Thread nope is no longer available."
@@ -79,7 +81,7 @@ async def test_tool_refusal_raises_with_code(
     assert caught.value.tool == "t3_thread_read"
 
 
-async def test_unknown_tool_is_a_jsonrpc_error(http_client: httpx.AsyncClient) -> None:
+async def test_unknown_tool_is_a_jsonrpc_error(http_client: httpx2.AsyncClient) -> None:
     async with make_client(http_client) as t3:
         with pytest.raises(T3McpError) as caught:
             await t3.call_raw("t3_does_not_exist")
@@ -87,7 +89,7 @@ async def test_unknown_tool_is_a_jsonrpc_error(http_client: httpx.AsyncClient) -
 
 
 async def test_result_not_matching_model(
-    fake_server: FakeMcpServer, http_client: httpx.AsyncClient
+    fake_server: FakeMcpServer, http_client: httpx2.AsyncClient
 ) -> None:
     fake_server.tools["t3_thread_list"] = lambda _args: tool_result({"unexpected": True})
     async with make_client(http_client) as t3:
@@ -96,7 +98,7 @@ async def test_result_not_matching_model(
 
 
 async def test_reopens_session_after_server_restart(
-    fake_server: FakeMcpServer, http_client: httpx.AsyncClient
+    fake_server: FakeMcpServer, http_client: httpx2.AsyncClient
 ) -> None:
     fake_server.tools["t3_thread_list"] = lambda _args: tool_result(THREAD_LIST_RESULT)
     async with make_client(http_client) as t3:
@@ -107,14 +109,14 @@ async def test_reopens_session_after_server_restart(
     assert len(fake_server.calls) == 2
 
 
-async def test_rejected_token(http_client: httpx.AsyncClient) -> None:
+async def test_rejected_token(http_client: httpx2.AsyncClient) -> None:
     async with T3Client(BASE_URL, "revoked", http_client=http_client) as t3:
         with pytest.raises(T3AuthError, match="no longer accepts"):
             await t3.call(THREAD_LIST, ThreadListInput())
 
 
 async def test_mode_limit_header(
-    fake_server: FakeMcpServer, http_client: httpx.AsyncClient
+    fake_server: FakeMcpServer, http_client: httpx2.AsyncClient
 ) -> None:
     fake_server.tools["t3_thread_list"] = lambda _args: tool_result(THREAD_LIST_RESULT)
     async with make_client(http_client, mode_limit=("approval-required", "plan")) as t3:
@@ -125,7 +127,9 @@ async def test_mode_limit_header(
     )
 
 
-async def test_no_origin_header(fake_server: FakeMcpServer, http_client: httpx.AsyncClient) -> None:
+async def test_no_origin_header(
+    fake_server: FakeMcpServer, http_client: httpx2.AsyncClient
+) -> None:
     """`/mcp` refuses requests that look like they come from a browser."""
     fake_server.tools["t3_thread_list"] = lambda _args: tool_result(THREAD_LIST_RESULT)
     async with make_client(http_client) as t3:
@@ -134,7 +138,7 @@ async def test_no_origin_header(fake_server: FakeMcpServer, http_client: httpx.A
 
 
 async def test_wait_for_thread_chunks_and_pins_run(
-    fake_server: FakeMcpServer, http_client: httpx.AsyncClient
+    fake_server: FakeMcpServer, http_client: httpx2.AsyncClient
 ) -> None:
     answers = iter([
         {"threadId": "t1", "runId": "r1", "status": "running", "timedOut": True},
@@ -154,7 +158,7 @@ async def test_wait_for_thread_chunks_and_pins_run(
 
 
 async def test_wait_for_thread_overall_timeout(
-    fake_server: FakeMcpServer, http_client: httpx.AsyncClient
+    fake_server: FakeMcpServer, http_client: httpx2.AsyncClient
 ) -> None:
     fake_server.tools["t3_thread_wait"] = lambda _args: tool_result({
         "threadId": "t1",

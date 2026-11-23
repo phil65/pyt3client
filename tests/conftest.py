@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 import json
 from typing import TYPE_CHECKING, Any
 
-import httpx
+import httpx2
 import pytest
 
 
@@ -32,19 +32,19 @@ class FakeMcpServer:
     sse: bool = False
     """Answer with `text/event-stream` instead of JSON, as some MCP servers do."""
     sessions_opened: int = 0
-    requests: list[httpx.Request] = field(default_factory=list)
+    requests: list[httpx2.Request] = field(default_factory=list)
     calls: list[tuple[str, dict[str, Any]]] = field(default_factory=list)
     drop_session_once: bool = False
     """Answer the next session request with 404, as after a server restart."""
     _live_session: str | None = None
 
-    def handle(self, request: httpx.Request) -> httpx.Response:  # noqa: PLR0911
+    def handle(self, request: httpx2.Request) -> httpx2.Response:  # noqa: PLR0911
         self.requests.append(request)
         if request.headers.get("authorization") != f"Bearer {TOKEN}":
-            return httpx.Response(401, json={"error": "invalid_token"})
+            return httpx2.Response(401, json={"error": "invalid_token"})
         if request.method == "DELETE":
             self._live_session = None
-            return httpx.Response(200)
+            return httpx2.Response(200)
         body = json.loads(request.content)
         if body["method"] == "initialize":
             self.sessions_opened += 1
@@ -63,12 +63,12 @@ class FakeMcpServer:
             self.drop_session_once = False
             self._live_session = None
         if session is None or session != self._live_session:
-            return httpx.Response(404)
+            return httpx2.Response(404)
         if request.headers.get("mcp-protocol-version") != "2025-06-18":
-            return httpx.Response(400)
+            return httpx2.Response(400)
         match body["method"]:
             case "notifications/initialized":
-                return httpx.Response(202)
+                return httpx2.Response(202)
             case "tools/list":
                 tools = [{"name": name, "inputSchema": {"type": "object"}} for name in self.tools]
                 return self._respond(body["id"], {"tools": tools})
@@ -84,22 +84,22 @@ class FakeMcpServer:
 
     def _respond(
         self, request_id: int, result: dict[str, Any], headers: dict[str, str] | None = None
-    ) -> httpx.Response:
+    ) -> httpx2.Response:
         message = {"jsonrpc": "2.0", "id": request_id, "result": result}
         if self.sse:
             progress = {"jsonrpc": "2.0", "method": "notifications/progress", "params": {}}
             text = f"event: message\ndata: {json.dumps(progress)}\n\n"
             text += f"event: message\ndata: {json.dumps(message)}\n\n"
-            return httpx.Response(
+            return httpx2.Response(
                 200,
                 text=text,
                 headers={"content-type": "text/event-stream", **(headers or {})},
             )
-        return httpx.Response(200, json=message, headers=headers)
+        return httpx2.Response(200, json=message, headers=headers)
 
-    def _error(self, request_id: int, code: int, message: str) -> httpx.Response:
+    def _error(self, request_id: int, code: int, message: str) -> httpx2.Response:
         error = {"jsonrpc": "2.0", "id": request_id, "error": {"code": code, "message": message}}
-        return httpx.Response(200, json=error)
+        return httpx2.Response(200, json=error)
 
 
 def tool_result(payload: dict[str, Any], *, structured: bool = True) -> dict[str, Any]:
@@ -122,5 +122,5 @@ def fake_server() -> FakeMcpServer:
 
 
 @pytest.fixture
-def http_client(fake_server: FakeMcpServer) -> httpx.AsyncClient:
-    return httpx.AsyncClient(transport=httpx.MockTransport(fake_server.handle))
+def http_client(fake_server: FakeMcpServer) -> httpx2.AsyncClient:
+    return httpx2.AsyncClient(transport=httpx2.MockTransport(fake_server.handle))

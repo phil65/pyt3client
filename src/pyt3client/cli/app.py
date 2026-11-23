@@ -19,7 +19,7 @@ from pathlib import PurePath, PurePosixPath, PureWindowsPath
 import sys
 from typing import TYPE_CHECKING, Annotated, Literal, NoReturn
 
-import httpx
+import httpx2
 from pydantic import BaseModel, JsonValue
 import typer
 
@@ -98,13 +98,13 @@ type ThreadStatus = Literal[
 
 @dataclass
 class Runtime:
-    """Per-invocation state; tests pass one as `obj=` to inject an httpx transport."""
+    """Per-invocation state; tests pass one as `obj=` to inject an httpx2 transport."""
 
-    transport: httpx.AsyncBaseTransport | None = None
+    transport: httpx2.AsyncBaseTransport | None = None
     env: str | None = None
 
-    def http_client(self) -> httpx.AsyncClient:
-        return httpx.AsyncClient(transport=self.transport, timeout=60)
+    def http_client(self) -> httpx2.AsyncClient:
+        return httpx2.AsyncClient(transport=self.transport, timeout=60)
 
 
 app = typer.Typer(
@@ -262,7 +262,7 @@ def _run(ctx: typer.Context, operation: Callable[[T3Client], Awaitable[int]]) ->
         _fail(f"protocol: {error}")
     except T3Error as error:
         _fail(str(error))
-    except httpx.HTTPError as error:
+    except httpx2.HTTPError as error:
         _fail(f"cannot reach {alias!r} at {credentials.base_url}: {error}")
     raise typer.Exit(code)
 
@@ -403,7 +403,7 @@ def login(
         environments = store.load()
     except T3AuthError as error:
         _fail(f"auth: {error}")
-    except (T3Error, httpx.HTTPError) as error:
+    except (T3Error, httpx2.HTTPError) as error:
         _fail(f"cannot sign in at {url}: {error}")
     except store.StoreError as error:
         _fail(str(error))
@@ -464,7 +464,7 @@ def login_native(
         native = store.load_native()
     except T3AuthError as error:
         _fail(f"auth: {error}")
-    except (T3Error, httpx.HTTPError) as error:
+    except (T3Error, httpx2.HTTPError) as error:
         _fail(f"cannot sign in at {url}: {error}")
     except store.StoreError as error:
         _fail(str(error))

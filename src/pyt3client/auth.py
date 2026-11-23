@@ -32,7 +32,7 @@ import secrets
 from typing import TYPE_CHECKING, get_args
 from urllib.parse import parse_qs, urlsplit
 
-import httpx
+import httpx2
 from pydantic import ValidationError
 
 from pyt3client.errors import T3AuthError, T3HttpError, T3ProtocolError
@@ -95,7 +95,7 @@ def _base64url(data: bytes) -> str:
     return base64.urlsafe_b64encode(data).rstrip(b"=").decode("ascii")
 
 
-def _decode[ModelT: BaseModel](model: type[ModelT], response: httpx.Response, what: str) -> ModelT:
+def _decode[ModelT: BaseModel](model: type[ModelT], response: httpx2.Response, what: str) -> ModelT:
     try:
         return model.model_validate_json(response.content)
     except ValidationError as error:
@@ -103,7 +103,7 @@ def _decode[ModelT: BaseModel](model: type[ModelT], response: httpx.Response, wh
         raise T3ProtocolError(msg) from error
 
 
-def _oauth_error(response: httpx.Response, what: str) -> T3AuthError:
+def _oauth_error(response: httpx2.Response, what: str) -> T3AuthError:
     """Turn an OAuth or approval error body into a readable exception.
 
     `/oauth/mcp/register` and `/oauth/mcp/token` answer RFC 6749 style
@@ -128,7 +128,7 @@ def _normalize_base_url(base_url: str) -> str:
 
 
 async def fetch_descriptor(
-    base_url: str, *, http_client: httpx.AsyncClient | None = None
+    base_url: str, *, http_client: httpx2.AsyncClient | None = None
 ) -> EnvironmentDescriptor:
     """Read an environment's public descriptor; needs no credential.
 
@@ -139,7 +139,7 @@ async def fetch_descriptor(
     url = f"{_normalize_base_url(base_url)}/.well-known/t3/environment"
     async with _client_scope(http_client) as client:
         response = await client.get(url)
-    if response.status_code != httpx.codes.OK:
+    if response.status_code != httpx2.codes.OK:
         msg = f"{url} is not a T3 Code environment"
         raise T3HttpError(msg, status=response.status_code, body=response.text)
     return _decode(EnvironmentDescriptor, response, "environment descriptor")
@@ -151,7 +151,7 @@ async def pair(
     *,
     access: McpAccess = "auto",
     client_name: str = DEFAULT_CLIENT_NAME,
-    http_client: httpx.AsyncClient | None = None,
+    http_client: httpx2.AsyncClient | None = None,
 ) -> T3Credentials:
     """Sign in to an environment's `/mcp` with a one-time pairing code.
 
@@ -187,7 +187,7 @@ async def pair(
     async with _client_scope(http_client) as client:
         descriptor = await fetch_descriptor(origin, http_client=client)
         metadata_response = await client.get(f"{origin}/.well-known/oauth-authorization-server")
-        if metadata_response.status_code != httpx.codes.OK:
+        if metadata_response.status_code != httpx2.codes.OK:
             msg = "Environment does not offer MCP sign-in"
             raise T3HttpError(
                 msg, status=metadata_response.status_code, body=metadata_response.text
@@ -200,7 +200,7 @@ async def pair(
             metadata.registration_endpoint,
             json={"client_name": client_name, "redirect_uris": [REDIRECT_URI]},
         )
-        if registered_response.status_code not in {httpx.codes.OK, httpx.codes.CREATED}:
+        if registered_response.status_code not in {httpx2.codes.OK, httpx2.codes.CREATED}:
             raise _oauth_error(registered_response, "Client registration")
         registered = _decode(RegisteredClient, registered_response, "client registration")
 
@@ -226,7 +226,7 @@ async def pair(
                 "decision": {"_tag": "pairing-code", "access": access, "code": code},
             },
         )
-        if decision_response.status_code != httpx.codes.OK:
+        if decision_response.status_code != httpx2.codes.OK:
             raise _oauth_error(decision_response, "Approval")
         redirect = _decode(ApprovalRedirect, decision_response, "approval")
         params = parse_qs(urlsplit(redirect.redirect_to).query)
@@ -246,7 +246,7 @@ async def pair(
                 "resource": resource,
             },
         )
-        if token_response.status_code != httpx.codes.OK:
+        if token_response.status_code != httpx2.codes.OK:
             raise _oauth_error(token_response, "Token exchange")
         token = _decode(McpTokenResult, token_response, "token")
     return T3Credentials(
@@ -261,10 +261,10 @@ async def pair(
 
 
 @asynccontextmanager
-async def _client_scope(client: httpx.AsyncClient | None) -> AsyncGenerator[httpx.AsyncClient]:
-    """Use a caller's httpx client, or own a short-lived one for the duration."""
+async def _client_scope(client: httpx2.AsyncClient | None) -> AsyncGenerator[httpx2.AsyncClient]:
+    """Use a caller's httpx2 client, or own a short-lived one for the duration."""
     if client is not None:
         yield client
         return
-    async with httpx.AsyncClient(timeout=30) as owned:
+    async with httpx2.AsyncClient(timeout=30) as owned:
         yield owned

@@ -6,7 +6,7 @@ import json
 import time
 from typing import TYPE_CHECKING, Self
 
-import httpx
+import httpx2
 from pydantic import JsonValue, SecretStr, ValidationError
 
 from pyt3client.auth import fetch_descriptor
@@ -71,7 +71,7 @@ class T3Client:
         mode_limit: tuple[RuntimeMode, InteractionMode] | None = None,
         client_name: str = "pyt3client",
         timeout: float = 60.0,
-        http_client: httpx.AsyncClient | None = None,
+        http_client: httpx2.AsyncClient | None = None,
     ) -> None:
         """Create a client; the MCP session opens on first use.
 
@@ -89,7 +89,7 @@ class T3Client:
         """
         self.base_url = base_url.rstrip("/").removesuffix("/mcp")
         self._owns_http = http_client is None
-        self._http = http_client or httpx.AsyncClient(timeout=timeout)
+        self._http = http_client or httpx2.AsyncClient(timeout=timeout)
         headers = (
             {} if mode_limit is None else {"t3-mode-limit": f"{mode_limit[0]}/{mode_limit[1]}"}
         )
@@ -109,7 +109,7 @@ class T3Client:
         mode_limit: tuple[RuntimeMode, InteractionMode] | None = None,
         client_name: str = "pyt3client",
         timeout: float = 60.0,
-        http_client: httpx.AsyncClient | None = None,
+        http_client: httpx2.AsyncClient | None = None,
     ) -> Self:
         """Create a client from the result of `pair()`.
 

@@ -33,7 +33,7 @@ the environment's MCP endpoint (`/mcp`), the interface T3 Code offers outside ag
   without a browser.
 - **Fully typed.** Every one of the server's ~50 tools has generated Pydantic input
   and output models, taken from the JSON Schemas a real server advertises.
-- **Small.** It depends only on `httpx` and `pydantic`.
+- **Small.** It depends only on `httpx2` and `pydantic`.
 
 ## Quickstart
 

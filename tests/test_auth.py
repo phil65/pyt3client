@@ -9,7 +9,7 @@ import json
 from typing import Any
 from urllib.parse import parse_qs, urlencode
 
-import httpx
+import httpx2
 import pytest
 
 from pyt3client import T3AuthError, pair
@@ -28,10 +28,10 @@ class FakeOAuthServer:
     decisions: list[dict[str, Any]] = field(default_factory=list)
     _challenge: str | None = None
 
-    def handle(self, request: httpx.Request) -> httpx.Response:  # noqa: PLR0911
+    def handle(self, request: httpx2.Request) -> httpx2.Response:  # noqa: PLR0911
         match request.method, request.url.path:
             case "GET", "/.well-known/t3/environment":
-                return httpx.Response(
+                return httpx2.Response(
                     200,
                     json={
                         "environmentId": ENVIRONMENT_ID,
@@ -42,7 +42,7 @@ class FakeOAuthServer:
                     },
                 )
             case "GET", "/.well-known/oauth-authorization-server":
-                return httpx.Response(
+                return httpx2.Response(
                     200,
                     json={
                         "issuer": BASE,
@@ -55,7 +55,7 @@ class FakeOAuthServer:
             case "POST", "/oauth/mcp/register":
                 body = json.loads(request.content)
                 assert body["redirect_uris"] == [REDIRECT_URI]
-                return httpx.Response(
+                return httpx2.Response(
                     201,
                     json={
                         "client_id": "client-1",
@@ -70,13 +70,13 @@ class FakeOAuthServer:
                 assert authorization["code_challenge_method"] == "S256"
                 assert authorization["resource"] == f"{BASE}/mcp"
                 if decision["code"] not in self.valid_codes:
-                    return httpx.Response(
+                    return httpx2.Response(
                         400,
                         json={"_tag": "AuthMcpApprovalError", "message": "That code is not valid."},
                     )
                 self._challenge = authorization["code_challenge"]
                 query = urlencode({"code": "auth-code", "state": authorization["state"]})
-                return httpx.Response(200, json={"redirectTo": f"{REDIRECT_URI}?{query}"})
+                return httpx2.Response(200, json={"redirectTo": f"{REDIRECT_URI}?{query}"})
             case "POST", "/oauth/mcp/token":
                 form = {
                     key: values[0] for key, values in parse_qs(request.content.decode()).items()
@@ -84,10 +84,10 @@ class FakeOAuthServer:
                 digest = hashlib.sha256(form["code_verifier"].encode()).digest()
                 challenge = base64.urlsafe_b64encode(digest).rstrip(b"=").decode()
                 if challenge != self._challenge or form["code"] != "auth-code":
-                    return httpx.Response(
+                    return httpx2.Response(
                         400, json={"error": "invalid_grant", "error_description": "PKCE mismatch"}
                     )
-                return httpx.Response(
+                return httpx2.Response(
                     200,
                     json={
                         "access_token": "mcp-token",
@@ -97,7 +97,7 @@ class FakeOAuthServer:
                     },
                 )
             case method, path:
-                return httpx.Response(404, text=f"{method} {path}")
+                return httpx2.Response(404, text=f"{method} {path}")
 
 
 @pytest.fixture
@@ -106,11 +106,11 @@ def oauth() -> FakeOAuthServer:
 
 
 @pytest.fixture
-def client(oauth: FakeOAuthServer) -> httpx.AsyncClient:
-    return httpx.AsyncClient(transport=httpx.MockTransport(oauth.handle))
+def client(oauth: FakeOAuthServer) -> httpx2.AsyncClient:
+    return httpx2.AsyncClient(transport=httpx2.MockTransport(oauth.handle))
 
 
-async def test_pair_with_plain_code(oauth: FakeOAuthServer, client: httpx.AsyncClient) -> None:
+async def test_pair_with_plain_code(oauth: FakeOAuthServer, client: httpx2.AsyncClient) -> None:
     credentials = await pair(f"{BASE}/mcp", "PLAINCODE", access="read-only", http_client=client)
     assert credentials.base_url == BASE
     assert credentials.environment_id == ENVIRONMENT_ID
@@ -125,7 +125,7 @@ async def test_pair_with_plain_code(oauth: FakeOAuthServer, client: httpx.AsyncC
 
 
 async def test_approval_code_sets_its_own_level(
-    oauth: FakeOAuthServer, client: httpx.AsyncClient
+    oauth: FakeOAuthServer, client: httpx2.AsyncClient
 ) -> None:
     credentials = await pair(BASE, " auto-23456789abcd ", access="read-only", http_client=client)
     assert credentials.access == "auto"
@@ -137,7 +137,7 @@ async def test_approval_code_sets_its_own_level(
     }
 
 
-async def test_rejected_code_raises(client: httpx.AsyncClient) -> None:
+async def test_rejected_code_raises(client: httpx2.AsyncClient) -> None:
     with pytest.raises(T3AuthError, match="That code is not valid"):
         await pair(BASE, "WRONG", http_client=client)
 

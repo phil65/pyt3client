@@ -8,7 +8,7 @@ import os
 import stat
 from typing import TYPE_CHECKING, Any
 
-import httpx
+import httpx2
 from pydantic import SecretStr
 import pytest
 from typer.testing import CliRunner
@@ -161,7 +161,7 @@ def server(fake_server: FakeMcpServer) -> FakeMcpServer:
 
 
 def invoke(server: FakeMcpServer | FakeOAuthServer, *args: str, stdin: str | None = None) -> Any:
-    runtime = Runtime(transport=httpx.MockTransport(server.handle))
+    runtime = Runtime(transport=httpx2.MockTransport(server.handle))
     return CliRunner().invoke(app, list(args), obj=runtime, input=stdin)
 
 
@@ -372,18 +372,18 @@ def test_project_paths_are_server_paths(
 class _NativeTokenServer:
     """Answers the native token exchange: `NATIVE` is a valid pairing token."""
 
-    def handle(self, request: httpx.Request) -> httpx.Response:
+    def handle(self, request: httpx2.Request) -> httpx2.Response:
         if request.url.path == "/oauth/token":
             if b"subject_token=NATIVE" not in request.content:
-                return httpx.Response(400, json={"error": "invalid_grant"})
+                return httpx2.Response(400, json={"error": "invalid_grant"})
             token = {"access_token": "native-1", "expires_in": 3600, "scope": "orchestration:read"}
-            return httpx.Response(200, json=token)
-        return httpx.Response(404)
+            return httpx2.Response(200, json=token)
+        return httpx2.Response(404)
 
 
 def test_login_native_joins_the_mcp_sign_in_and_logout_forgets_both(logged_in: Path) -> None:
     server = _NativeTokenServer()
-    runtime = Runtime(transport=httpx.MockTransport(server.handle))
+    runtime = Runtime(transport=httpx2.MockTransport(server.handle))
     result = CliRunner().invoke(app, ["login-native", BASE_URL, "NATIVE"], obj=runtime)
     assert result.exit_code == 0, result.output
     assert "Signed in natively to home" in result.output

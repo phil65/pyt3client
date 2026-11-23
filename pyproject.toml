@@ -11,7 +11,7 @@ license-files = ["LICENSE"]
 authors = [
   { name = "Philipp Temminghoff", email = "philipptemminghoff@googlemail.com" },
 ]
-keywords = ["t3code", "mcp", "agents", "orchestration"]
+keywords = ["agents", "mcp", "orchestration", "t3code"]
 classifiers = [
   "Development Status :: 4 - Beta",
   "Framework :: Pydantic",
@@ -29,19 +29,10 @@ classifiers = [
   "Typing :: Typed",
 ]
 dependencies = [
-  "pydantic>=2.11",
   # Only add below (Copier)
-  "httpx>=0.27",
+  "httpx2>=2.16",
+  "pydantic>=2.11",
 ]
-
-[project.optional-dependencies]
-# The `pyt3` command line tool.
-cli = ["typer>=0.12"]
-# The native WebSocket RPC (`pyt3client.native`).
-native = ["websockets>=15"]
-
-[project.scripts]
-pyt3 = "pyt3client.cli:app"
 
 [project.urls]
 "Code coverage" = "https://app.codecov.io/gh/phil65/pyt3client"
@@ -50,18 +41,29 @@ Documentation = "https://phil65.github.io/pyt3client/"
 Issues = "https://github.com/phil65/pyt3client/issues"
 Source = "https://github.com/phil65/pyt3client"
 
+[project.scripts]
+pyt3 = "pyt3client.cli:app"
+
+[project.optional-dependencies]
+# The `pyt3` command line tool.
+cli = ["typer>=0.12"]
+# The native WebSocket RPC (`pyt3client.native`).
+native = ["websockets>=15"]
+
 [dependency-groups]
 dev = [
   "deptry",
   "devtools",
   "pyreadline3",
   "pytest",
-  "pytest-cov",
   # Only add below (Copier)
   "pytest-asyncio",
+  "pytest-cov",
   "typer>=0.12",
 ]
 benchmark = ["pyinstrument"]
+# Regenerates src/pyt3client/models/tools.py: `uv run --group codegen scripts/generate_models.py`
+codegen = ["datamodel-code-generator>=0.99"]
 docs = [
   "mkdocs-material",
   "mkdocs-mknodes",
@@ -72,8 +74,6 @@ lint = [
   "ty",
   # Only add below (Copier)
 ]
-# Regenerates src/pyt3client/models/tools.py: `uv run --group codegen scripts/generate_models.py`
-codegen = ["datamodel-code-generator>=0.99"]
 
 [build-system]
 requires = ["uv_build>=0.8.22"]
@@ -123,14 +123,14 @@ reportPrivateImportUsage = false
 log_cli = true
 log_date_format = "%Y-%m-%d %H:%M:%S"
 log_format = "%(asctime)s %(levelname)s %(message)s"
+markers = [
+  "integration: needs a running T3 Code server (T3_URL, T3_PAIRING_CODE); skipped otherwise",
+]
 minversion = "9.0"
 testpaths = ["tests/"]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "module"
 asyncio_default_test_loop_scope = "module"
-markers = [
-  "integration: needs a running T3 Code server (T3_URL, T3_PAIRING_CODE); skipped otherwise",
-]
 
 [tool.ruff]
 line-length = 100

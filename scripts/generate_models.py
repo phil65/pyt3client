@@ -62,13 +62,13 @@ def _response_json(response: Any) -> Any:
 
 def fetch(url: str, token: str) -> None:
     """Snapshot `initialize` + `tools/list` from a live server into SNAPSHOT."""
-    import httpx
+    import httpx2
 
     headers = {
         "authorization": f"Bearer {token}",
         "accept": "application/json, text/event-stream",
     }
-    with httpx.Client(base_url=url.rstrip("/"), headers=headers, timeout=30) as client:
+    with httpx2.Client(base_url=url.rstrip("/"), headers=headers, timeout=30) as client:
         init = client.post(
             "/mcp",
             json={

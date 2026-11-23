@@ -9,7 +9,7 @@ import json
 from typing import TYPE_CHECKING, Any
 from urllib.parse import parse_qs
 
-import httpx
+import httpx2
 import pytest
 from websockets.asyncio.server import serve
 
@@ -167,29 +167,31 @@ async def test_server_ping_is_answered_and_closing_fails_open_requests() -> None
             await socket.call("orchestration.getThreadProjection", {"threadId": "t1"})
 
 
-def _auth_transport(seen: list[httpx.Request], *, ticket_status: int = 200) -> httpx.MockTransport:
-    def handle(request: httpx.Request) -> httpx.Response:
+def _auth_transport(
+    seen: list[httpx2.Request], *, ticket_status: int = 200
+) -> httpx2.MockTransport:
+    def handle(request: httpx2.Request) -> httpx2.Response:
         seen.append(request)
         match request.url.path:
             case "/oauth/token":
                 form = parse_qs(request.content.decode())
                 if form["subject_token"] != ["GOOD"]:
-                    return httpx.Response(400, json={"error": "invalid_grant"})
+                    return httpx2.Response(400, json={"error": "invalid_grant"})
                 token = {"access_token": "bearer-1", "expires_in": 3600, "scope": "a b"}
-                return httpx.Response(200, json=token)
+                return httpx2.Response(200, json=token)
             case "/api/auth/websocket-ticket":
-                if ticket_status != httpx.codes.OK:
-                    return httpx.Response(ticket_status, json={"error": "unauthorized"})
-                return httpx.Response(200, json={"ticket": "t/1+", "expiresAt": "x"})
+                if ticket_status != httpx2.codes.OK:
+                    return httpx2.Response(ticket_status, json={"error": "unauthorized"})
+                return httpx2.Response(200, json={"ticket": "t/1+", "expiresAt": "x"})
             case _:
-                return httpx.Response(404)
+                return httpx2.Response(404)
 
-    return httpx.MockTransport(handle)
+    return httpx2.MockTransport(handle)
 
 
 async def test_sign_in_exchanges_the_pairing_token() -> None:
-    seen: list[httpx.Request] = []
-    async with httpx.AsyncClient(transport=_auth_transport(seen)) as http:
+    seen: list[httpx2.Request] = []
+    async with httpx2.AsyncClient(transport=_auth_transport(seen)) as http:
         credentials = await sign_in_native(
             "http://t3.test/", " GOOD ", label="me", http_client=http
         )
@@ -204,12 +206,12 @@ async def test_sign_in_exchanges_the_pairing_token() -> None:
 
 
 async def test_websocket_url_carries_a_fresh_ticket() -> None:
-    seen: list[httpx.Request] = []
-    async with httpx.AsyncClient(transport=_auth_transport(seen)) as http:
+    seen: list[httpx2.Request] = []
+    async with httpx2.AsyncClient(transport=_auth_transport(seen)) as http:
         url = await websocket_url("https://t3.test", "bearer-1", http_client=http)
     assert url == "wss://t3.test/ws?orchestrationProtocol=2&wsTicket=t%2F1%2B"
     assert seen[0].headers["authorization"] == "Bearer bearer-1"
-    async with httpx.AsyncClient(transport=_auth_transport([], ticket_status=401)) as http:
+    async with httpx2.AsyncClient(transport=_auth_transport([], ticket_status=401)) as http:
         with pytest.raises(T3AuthError, match="native credential"):
             await websocket_url("http://t3.test", "mcp-token", http_client=http)
 
@@ -229,7 +231,7 @@ async def test_client_subscribes_and_answers_approvals() -> None:
     async with rpc_server(script) as (url, state):
         host = url.removeprefix("ws://").removesuffix("/ws")
         async with (
-            httpx.AsyncClient(transport=_auth_transport([])) as http,
+            httpx2.AsyncClient(transport=_auth_transport([])) as http,
             T3NativeClient(f"http://{host}", "bearer-1", http_client=http) as t3,
         ):
             items = []

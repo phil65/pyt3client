@@ -2,7 +2,7 @@
 
 T3 Code needs only `initialize`, `tools/list` and `tools/call`, with no
 sampling, elicitation or server-initiated requests, so this speaks that subset
-directly over httpx rather than pulling in a full MCP SDK. It mirrors upstream's
+directly over httpx2 rather than pulling in a full MCP SDK. It mirrors upstream's
 own client for linked environments, apps/server/src/peer/PeerMcpClient.ts
 (https://github.com/pingdotgg/t3code):
 
@@ -12,7 +12,7 @@ own client for linked environments, apps/server/src/peer/PeerMcpClient.ts
 - Sessions live in server memory, so after a server restart a request gets 404.
   The session is then opened again and the request retried once.
 - Requests must not carry an `Origin` header: `/mcp` answers 403 to anything
-  that looks like a browser (apps/server/src/mcp/McpHttpServer.ts). httpx sends
+  that looks like a browser (apps/server/src/mcp/McpHttpServer.ts). httpx2 sends
   none by default.
 """
 
@@ -23,7 +23,7 @@ from itertools import count
 import json
 from typing import TYPE_CHECKING, Literal
 
-import httpx
+import httpx2
 from pydantic import BaseModel, ConfigDict, Field, JsonValue, ValidationError
 
 from pyt3client.errors import T3AuthError, T3HttpError, T3McpError, T3ProtocolError
@@ -102,7 +102,7 @@ class ToolInfo(BaseModel):
     annotations: ToolAnnotations | None = None
 
 
-def _parse_messages(response: httpx.Response) -> list[_JsonRpcResponse]:
+def _parse_messages(response: httpx2.Response) -> list[_JsonRpcResponse]:
     """Decode a JSON body, or every `data:` event of an SSE body."""
     if "text/event-stream" not in response.headers.get("content-type", ""):
         return [_JsonRpcResponse.model_validate_json(response.content)]
@@ -133,7 +133,7 @@ class McpHttpSession:
         url: str,
         token: SecretStr,
         *,
-        http_client: httpx.AsyncClient,
+        http_client: httpx2.AsyncClient,
         headers: Mapping[str, str] | None = None,
         client_name: str = "pyt3client",
         client_version: str = "0",
@@ -170,11 +170,11 @@ class McpHttpSession:
             headers["mcp-protocol-version"] = PROTOCOL_VERSION
         return headers
 
-    def _check_status(self, response: httpx.Response, method: str) -> None:
+    def _check_status(self, response: httpx2.Response, method: str) -> None:
         match response.status_code:
-            case httpx.codes.OK | httpx.codes.ACCEPTED:
+            case httpx2.codes.OK | httpx2.codes.ACCEPTED:
                 return
-            case httpx.codes.UNAUTHORIZED:
+            case httpx2.codes.UNAUTHORIZED:
                 msg = (
                     f"{method}: the environment no longer accepts this credential. It may have"
                     " been revoked under Settings -> Sharing & access or expired; pair again."
@@ -225,7 +225,7 @@ class McpHttpSession:
                 await self._open()
 
     def _result(
-        self, method: str, response: httpx.Response, request_id: int
+        self, method: str, response: httpx2.Response, request_id: int
     ) -> dict[str, JsonValue]:
         try:
             messages = _parse_messages(response)
@@ -276,9 +276,9 @@ class McpHttpSession:
                     "params": dict(params or {}),
                 },
                 headers=self._request_headers(session=True),
-                timeout=httpx.USE_CLIENT_DEFAULT if timeout is None else timeout,
+                timeout=httpx2.USE_CLIENT_DEFAULT if timeout is None else timeout,
             )
-            if response.status_code == httpx.codes.NOT_FOUND and attempt == 0:
+            if response.status_code == httpx2.codes.NOT_FOUND and attempt == 0:
                 logger.debug("MCP session %s is gone (server restart?); reopening", session_id)
                 await self._ensure_session(stale=session_id)
                 continue
@@ -328,7 +328,7 @@ class McpHttpSession:
             return
         try:
             await self._http.delete(self._url, headers=self._request_headers(session=True))
-        except httpx.HTTPError as error:
+        except httpx2.HTTPError as error:
             logger.debug("Closing MCP session failed: %s", error)
         finally:
             self._session_id = None

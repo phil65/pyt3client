@@ -16,7 +16,7 @@ from typing import TYPE_CHECKING, Self
 from urllib.parse import quote
 from uuid import uuid4
 
-import httpx
+import httpx2
 from pydantic import BaseModel, JsonValue, SecretStr
 
 from pyt3client.errors import T3AuthError, T3HttpError, T3ProtocolError
@@ -65,7 +65,7 @@ async def sign_in_native(
     *,
     label: str = "pyt3client",
     scopes: Sequence[str] | None = None,
-    http_client: httpx.AsyncClient | None = None,
+    http_client: httpx2.AsyncClient | None = None,
 ) -> T3NativeCredentials:
     """Exchange a one-time pairing token for a native bearer.
 
@@ -93,10 +93,10 @@ async def sign_in_native(
         form["scope"] = " ".join(scopes)
     async with _client(http_client) as client:
         response = await client.post(f"{origin}/oauth/token", data=form)
-    if response.status_code in (httpx.codes.BAD_REQUEST, httpx.codes.UNAUTHORIZED):
+    if response.status_code in (httpx2.codes.BAD_REQUEST, httpx2.codes.UNAUTHORIZED):
         msg = f"the pairing token was refused: {response.text[:300]}"
         raise T3AuthError(msg)
-    if response.status_code != httpx.codes.OK:
+    if response.status_code != httpx2.codes.OK:
         msg = "native sign-in failed"
         raise T3HttpError(msg, status=response.status_code, body=response.text)
     token = _TokenResponse.model_validate_json(response.content)
@@ -109,7 +109,7 @@ async def sign_in_native(
 
 
 async def websocket_url(
-    base_url: str, access_token: str, *, http_client: httpx.AsyncClient | None = None
+    base_url: str, access_token: str, *, http_client: httpx2.AsyncClient | None = None
 ) -> str:
     """The URL of a new socket, with a fresh one-time ticket.
 
@@ -123,13 +123,13 @@ async def websocket_url(
     }
     async with _client(http_client) as client:
         response = await client.post(f"{origin}/api/auth/websocket-ticket", headers=headers)
-    if response.status_code == httpx.codes.UNAUTHORIZED:
+    if response.status_code == httpx2.codes.UNAUTHORIZED:
         msg = (
             "the environment refused the native credential: it may be revoked or expired,"
             " or be an MCP token (the native surface needs its own sign-in)"
         )
         raise T3AuthError(msg)
-    if response.status_code != httpx.codes.OK:
+    if response.status_code != httpx2.codes.OK:
         msg = "websocket ticket"
         raise T3HttpError(msg, status=response.status_code, body=response.text)
     ticket = _Ticket.model_validate_json(response.content).ticket
@@ -152,7 +152,7 @@ class T3NativeClient:
     """
 
     def __init__(
-        self, base_url: str, access_token: str, *, http_client: httpx.AsyncClient | None = None
+        self, base_url: str, access_token: str, *, http_client: httpx2.AsyncClient | None = None
     ) -> None:
         self.base_url = _origin(base_url)
         self._access_token = access_token
@@ -162,7 +162,7 @@ class T3NativeClient:
 
     @classmethod
     def from_credentials(
-        cls, credentials: T3NativeCredentials, *, http_client: httpx.AsyncClient | None = None
+        cls, credentials: T3NativeCredentials, *, http_client: httpx2.AsyncClient | None = None
     ) -> Self:
         return cls(
             credentials.base_url,
@@ -261,7 +261,7 @@ class T3NativeClient:
         return await self.dispatch(command)
 
 
-def _client(client: httpx.AsyncClient | None) -> AbstractAsyncContextManager[httpx.AsyncClient]:
+def _client(client: httpx2.AsyncClient | None) -> AbstractAsyncContextManager[httpx2.AsyncClient]:
     from contextlib import nullcontext
 
-    return nullcontext(client) if client is not None else httpx.AsyncClient(timeout=30)
+    return nullcontext(client) if client is not None else httpx2.AsyncClient(timeout=30)
