@@ -9,7 +9,6 @@
 [![Implementation](https://img.shields.io/pypi/implementation/pyt3client.svg)](https://pypi.org/project/pyt3client/)
 [![Releases](https://img.shields.io/github/downloads/phil65/pyt3client/total.svg)](https://github.com/phil65/pyt3client/releases)
 [![Github Contributors](https://img.shields.io/github/contributors/phil65/pyt3client)](https://github.com/phil65/pyt3client/graphs/contributors)
-[![Github Discussions](https://img.shields.io/github/discussions/phil65/pyt3client)](https://github.com/phil65/pyt3client/discussions)
 [![Github Forks](https://img.shields.io/github/forks/phil65/pyt3client)](https://github.com/phil65/pyt3client/forks)
 [![Github Issues](https://img.shields.io/github/issues/phil65/pyt3client)](https://github.com/phil65/pyt3client/issues)
 [![Github Issues](https://img.shields.io/github/issues-pr/phil65/pyt3client)](https://github.com/phil65/pyt3client/pulls)
