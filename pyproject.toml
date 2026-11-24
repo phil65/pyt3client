@@ -2,7 +2,7 @@
 
 [project]
 name = "pyt3client"
-version = "0.3.0"
+version = "0.4.0"
 description = "Thin, typed Python client for T3 Code environments (via their MCP endpoint)"
 readme = "README.md"
 requires-python = ">=3.13"
