@@ -266,8 +266,106 @@ async def test_client_subscribes_and_answers_approvals() -> None:
 
 
 def test_unknown_stream_kinds_are_kept() -> None:
-    from pyt3client.native import parse_stream_item
+    from pyt3client.native import parse_shell_stream_item, parse_stream_item
 
     item = parse_stream_item({"kind": "bounded-snapshot", "x": 1})
     assert isinstance(item, UnknownStreamItem)
     assert item.model_extra == {"x": 1}
+
+    shell_item = parse_shell_stream_item({"kind": "future-shell-event", "y": 2})
+    assert isinstance(shell_item, UnknownStreamItem)
+    assert shell_item.model_extra == {"y": 2}
+
+
+async def test_client_subscribes_shell_and_dispatches_thread_commands() -> None:
+    from pyt3client.native import (
+        ShellSnapshot,
+        ShellSynchronized,
+        ShellThreadUpdated,
+    )
+
+    shell_snapshot = {
+        "kind": "snapshot",
+        "snapshot": {
+            "schemaVersion": 2,
+            "snapshotSequence": 10,
+            "projects": [{"id": "p1", "title": "acptui", "workspaceRoot": "/srv/acptui"}],
+            "threads": [
+                {
+                    "id": "t1",
+                    "projectId": "p1",
+                    "title": "Fix bug",
+                    "status": "running",
+                    "latestVisibleMessage": {"text": "Working on it", "role": "assistant"},
+                }
+            ],
+            "archivedThreads": [],
+        },
+    }
+    shell_update = {
+        "kind": "thread.updated",
+        "sequence": 11,
+        "location": "active",
+        "thread": {
+            "id": "t1",
+            "projectId": "p1",
+            "title": "Fix bug",
+            "status": "waiting",
+            "pendingRuntimeRequest": {"requestId": "req-9", "kind": "command", "prompt": "rm -rf"},
+        },
+    }
+
+    async def script(connection: ServerConnection, receive: Any) -> None:
+        sub = await receive()
+        await connection.send(
+            frame(
+                _tag="Chunk",
+                requestId=sub["id"],
+                values=[shell_snapshot, shell_update, {"kind": "synchronized"}],
+            )
+        )
+        for seq in (12, 13, 14):
+            req = await receive()
+            while req["_tag"] != "Request":
+                req = await receive()
+            await connection.send(
+                frame(
+                    _tag="Exit",
+                    requestId=req["id"],
+                    exit={"_tag": "Success", "value": {"sequence": seq}},
+                )
+            )
+        await connection.wait_closed()
+
+    async with rpc_server(script) as (url, state):
+        host = url.removeprefix("ws://").removesuffix("/ws")
+        async with (
+            httpx2.AsyncClient(transport=_auth_transport([])) as http,
+            T3NativeClient(f"http://{host}", "bearer-1", http_client=http) as t3,
+        ):
+            items = []
+            async for item in t3.subscribe_shell():
+                items.append(item)
+                if len(items) == 3:
+                    break
+            seq_msg = await t3.send_message("t1", "Hello!")
+            seq_stop = await t3.stop_thread("t1", reason="user")
+            seq_visit = await t3.visit_thread("t1")
+
+    snap, upd, synced = items
+    assert isinstance(snap, ShellSnapshot)
+    assert snap.snapshot.projects[0].title == "acptui"
+    assert snap.snapshot.threads[0].status == "running"
+    assert isinstance(upd, ShellThreadUpdated)
+    assert upd.thread.status == "waiting"
+    assert upd.thread.pending_runtime_request is not None
+    assert upd.thread.pending_runtime_request.request_id == "req-9"
+    assert isinstance(synced, ShellSynchronized)
+    assert (seq_msg, seq_stop, seq_visit) == (12, 13, 14)
+
+    dispatches = [
+        f["payload"] for f in state.received if f.get("tag") == "orchestration.dispatchCommand"
+    ]
+    assert [d["type"] for d in dispatches] == ["message.dispatch", "thread.stop", "thread.visit"]
+    assert dispatches[0]["text"] == "Hello!"
+    assert dispatches[0]["dispatchMode"] == {"type": "start_immediately"}

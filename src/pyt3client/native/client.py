@@ -21,7 +21,7 @@ from pydantic import BaseModel, JsonValue, SecretStr
 
 from pyt3client.errors import T3AuthError, T3HttpError, T3ProtocolError
 from pyt3client.models.auth import T3NativeCredentials
-from pyt3client.native.models import parse_stream_item
+from pyt3client.native.models import parse_shell_stream_item, parse_stream_item
 from pyt3client.native.rpc import RpcSocket
 
 
@@ -30,7 +30,7 @@ if TYPE_CHECKING:
     from contextlib import AbstractAsyncContextManager
     from types import TracebackType
 
-    from pyt3client.native.models import ApprovalDecision, ThreadStreamItem
+    from pyt3client.native.models import ApprovalDecision, ShellStreamItem, ThreadStreamItem
 
 
 ORCHESTRATION_PROTOCOL = 2
@@ -195,6 +195,16 @@ class T3NativeClient:
             raise RuntimeError(msg)
         return self._socket
 
+    async def subscribe_shell(
+        self, *, after_sequence: int | None = None
+    ) -> AsyncIterator[ShellStreamItem]:
+        """Workspace shell snapshot (projects and threads), then live updates (`subscribeShell`)."""
+        payload: dict[str, JsonValue] = {}
+        if after_sequence is not None:
+            payload["afterSequence"] = after_sequence
+        async for value in self.socket.stream("orchestration.subscribeShell", payload):
+            yield parse_shell_stream_item(value)
+
     async def subscribe_thread(
         self, thread_id: str, *, after_sequence: int | None = None
     ) -> AsyncIterator[ThreadStreamItem]:
@@ -211,11 +221,15 @@ class T3NativeClient:
         async for value in self.socket.stream("orchestration.subscribeThread", payload):
             yield parse_stream_item(value)
 
+    async def get_server_config(self) -> JsonValue:
+        """Fetch server configuration (providers, models, capabilities) via `server.getConfig`."""
+        return await self.socket.call("server.getConfig", {})
+
     async def dispatch(self, command: Mapping[str, JsonValue]) -> int:
         """Run an orchestration command (`dispatchCommand`); returns its event sequence.
 
         `command` is an `OrchestrationV2Command` (upstream `orchestrationV2.ts`), such
-        as `{"type": "thread.interrupt", "threadId": ...}`; a `commandId` is added
+        as `{"type": "thread.stop", "threadId": ...}`; a `commandId` is added
         when missing.
 
         Raises:
@@ -228,6 +242,76 @@ class T3NativeClient:
         except ValueError as error:
             msg = f"dispatchCommand: unexpected result {result!r}"
             raise T3ProtocolError(msg) from error
+
+    async def send_message(
+        self,
+        thread_id: str,
+        text: str,
+        *,
+        dispatch_mode: Mapping[str, JsonValue] | None = None,
+        model_selection: Mapping[str, JsonValue] | None = None,
+    ) -> int:
+        """Dispatch a user message to a thread (`message.dispatch`)."""
+        mode: dict[str, JsonValue] = (
+            dict(dispatch_mode) if dispatch_mode is not None else {"type": "start_immediately"}
+        )
+        command: dict[str, JsonValue] = {
+            "type": "message.dispatch",
+            "threadId": thread_id,
+            "messageId": str(uuid4()),
+            "text": text,
+            "attachments": [],
+            "dispatchMode": mode,
+        }
+        if model_selection is not None:
+            command["modelSelection"] = dict(model_selection)
+        return await self.dispatch(command)
+
+    async def stop_thread(self, thread_id: str, *, reason: str | None = None) -> int:
+        """Stop the active run on a thread (`thread.stop`)."""
+        command: dict[str, JsonValue] = {"type": "thread.stop", "threadId": thread_id}
+        if reason is not None:
+            command["reason"] = reason
+        return await self.dispatch(command)
+
+    async def visit_thread(self, thread_id: str, *, opened: bool = True) -> int:
+        """Record that the user viewed a thread (`thread.visit`)."""
+        return await self.dispatch({
+            "type": "thread.visit",
+            "threadId": thread_id,
+            "visitedAt": datetime.now(UTC).isoformat(),
+            "opened": opened,
+        })
+
+    async def create_thread(
+        self,
+        project_id: str,
+        title: str,
+        *,
+        model_selection: Mapping[str, JsonValue],
+        runtime_mode: str = "approval-required",
+        interaction_mode: str = "default",
+        thread_id: str | None = None,
+        branch: str | None = None,
+        worktree_path: str | None = None,
+    ) -> tuple[str, int]:
+        """Create a new thread in `project_id` (`thread.create`).
+
+        Returns `(thread_id, sequence)`.
+        """
+        tid = thread_id or str(uuid4())
+        seq = await self.dispatch({
+            "type": "thread.create",
+            "threadId": tid,
+            "projectId": project_id,
+            "title": title,
+            "modelSelection": dict(model_selection),
+            "runtimeMode": runtime_mode,
+            "interactionMode": interaction_mode,
+            "branch": branch,
+            "worktreePath": worktree_path,
+        })
+        return tid, seq
 
     async def respond_to_request(
         self,
