@@ -64,8 +64,8 @@ benchmark = ["pyinstrument"]
 # Regenerates src/pyt3client/models/tools.py: `uv run --group codegen scripts/generate_models.py`
 codegen = ["datamodel-code-generator>=0.99"]
 docs = [
-  "mkdocs-mknodes>=2.1.0",
   "mkdocstrings[python]",
+  "mknodes>=4.0.0",
   # Only add below (Copier)
 ]
 lint = [
