@@ -37,6 +37,8 @@ dependencies = [
 Documentation = "https://phil65.github.io/pyt3client/"
 Issues = "https://github.com/phil65/pyt3client/issues"
 Source = "https://github.com/phil65/pyt3client"
+"Spec: MCP" = "https://modelcontextprotocol.io/specification/2025-06-18"
+"Spec: T3 Code" = "https://github.com/pingdotgg/t3code"
 
 [project.scripts]
 pyt3 = "pyt3client.cli:app"

@@ -1,5 +1,7 @@
 # pyt3client
 
+Pinned upstream versions (T3 Code commit, MCP revision): see the Specs table in `AGENTS.md`.
+
 Thin, typed Python client for [T3 Code](https://github.com/pingdotgg/t3code)
 environments. It talks to an environment's MCP endpoint (`/mcp`), the interface T3
 Code offers outside agents and scripts.
