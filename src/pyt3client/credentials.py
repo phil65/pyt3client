@@ -14,6 +14,7 @@ from datetime import UTC, datetime
 import os
 from pathlib import Path
 import re
+import tempfile
 from typing import TYPE_CHECKING
 from urllib.parse import urlsplit
 
@@ -126,11 +127,18 @@ def _write(store: _StoreFile) -> Path:
     path = credentials_path()
     path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
     payload = store.model_dump_json(indent=2)
-    temporary = path.with_name(f".{path.name}.tmp")
-    descriptor = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-    with os.fdopen(descriptor, "w", encoding="utf-8") as file:
-        file.write(payload + "\n")
-    temporary.replace(path)
+    # A temp file per write (mkstemp: mode 0600), so concurrent writers never write into
+    # or rename away each other's file; the rename replaces the store atomically.
+    descriptor, temporary = tempfile.mkstemp(
+        prefix=f".{path.name}.", suffix=".tmp", dir=path.parent
+    )
+    try:
+        with os.fdopen(descriptor, "w", encoding="utf-8") as file:
+            file.write(payload + "\n")
+        Path(temporary).replace(path)
+    except BaseException:
+        Path(temporary).unlink(missing_ok=True)
+        raise
     path.chmod(0o600)
     return path
 

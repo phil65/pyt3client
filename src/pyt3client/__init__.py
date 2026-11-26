@@ -23,6 +23,7 @@ from pyt3client.auth import fetch_descriptor, pair
 from pyt3client.client import T3Client
 from pyt3client.errors import (
     T3AuthError,
+    T3ConnectionError,
     T3Error,
     T3HttpError,
     T3McpError,
@@ -48,6 +49,7 @@ __all__ = [
     "JsonOutput",
     "T3AuthError",
     "T3Client",
+    "T3ConnectionError",
     "T3Credentials",
     "T3Error",
     "T3HttpError",

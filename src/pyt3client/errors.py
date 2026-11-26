@@ -2,7 +2,14 @@
 
 from __future__ import annotations
 
-from typing import Literal
+from contextlib import contextmanager
+from typing import TYPE_CHECKING, Literal
+
+import httpx2
+
+
+if TYPE_CHECKING:
+    from collections.abc import Generator
 
 
 type OrchestratorFailureCode = Literal[
@@ -42,6 +49,14 @@ class T3HttpError(T3Error):
         super().__init__(f"{message} (HTTP {status}): {body[:500]}")
         self.status = status
         self.body = body
+
+
+class T3ConnectionError(T3Error):
+    """The server could not be reached, or the connection failed or timed out.
+
+    Wraps httpx2's transport errors (connect errors, timeouts, dropped connections),
+    which stay available as `__cause__`.
+    """
 
 
 class T3AuthError(T3Error):
@@ -103,3 +118,23 @@ class T3RpcError(T3Error):
         self.message = message
         self.cause = cause
         """The failure as the server encoded it (JSON), if any."""
+
+
+@contextmanager
+def transport_errors(what: str, url: object = None) -> Generator[None]:
+    """Raise httpx2 transport errors in the block as `T3ConnectionError`.
+
+    Args:
+        what: The operation, for the message.
+        url: The address, for the message; the failed request's URL by default.
+    """
+    try:
+        yield
+    except httpx2.TransportError as error:
+        if url is None:
+            try:
+                url = error.request.url
+            except RuntimeError:  # raised without a request
+                url = "?"
+        msg = f"{what}: {url}: {type(error).__name__}: {error}"
+        raise T3ConnectionError(msg) from error

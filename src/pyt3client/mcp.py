@@ -26,7 +26,13 @@ from typing import TYPE_CHECKING, Literal
 import httpx2
 from pydantic import BaseModel, ConfigDict, Field, JsonValue, ValidationError
 
-from pyt3client.errors import T3AuthError, T3HttpError, T3McpError, T3ProtocolError
+from pyt3client.errors import (
+    T3AuthError,
+    T3HttpError,
+    T3McpError,
+    T3ProtocolError,
+    transport_errors,
+)
 from pyt3client.log import get_logger
 
 
@@ -159,14 +165,14 @@ class McpHttpSession:
         self.server_info: dict[str, JsonValue] | None = None
         """`serverInfo` from `initialize`, such as `{"name": "T3 Code", "version": ...}`."""
 
-    def _request_headers(self, *, session: bool) -> dict[str, str]:
+    def _request_headers(self, session_id: str | None) -> dict[str, str]:
         headers = {
             "accept": "application/json, text/event-stream",
             "authorization": f"Bearer {self._token.get_secret_value()}",
             **self._headers,
         }
-        if session and self._session_id is not None:
-            headers["mcp-session-id"] = self._session_id
+        if session_id is not None:
+            headers["mcp-session-id"] = session_id
             headers["mcp-protocol-version"] = PROTOCOL_VERSION
         return headers
 
@@ -185,20 +191,21 @@ class McpHttpSession:
                 raise T3HttpError(msg, status=status, body=response.text)
 
     async def _open(self) -> str:
-        response = await self._http.post(
-            self._url,
-            json={
-                "jsonrpc": "2.0",
-                "id": 0,
-                "method": "initialize",
-                "params": {
-                    "protocolVersion": PROTOCOL_VERSION,
-                    "capabilities": {},
-                    "clientInfo": self._client_info,
+        with transport_errors("initialize", self._url):
+            response = await self._http.post(
+                self._url,
+                json={
+                    "jsonrpc": "2.0",
+                    "id": 0,
+                    "method": "initialize",
+                    "params": {
+                        "protocolVersion": PROTOCOL_VERSION,
+                        "capabilities": {},
+                        "clientInfo": self._client_info,
+                    },
                 },
-            },
-            headers=self._request_headers(session=False),
-        )
+                headers=self._request_headers(None),
+            )
         self._check_status(response, "initialize")
         session_id = response.headers.get("mcp-session-id")
         if session_id is None:
@@ -207,13 +214,16 @@ class McpHttpSession:
         result = self._result("initialize", response, 0)
         server_info = result.get("serverInfo")
         self.server_info = server_info if isinstance(server_info, dict) else None
-        self._session_id = session_id
-        notified = await self._http.post(
-            self._url,
-            json={"jsonrpc": "2.0", "method": "notifications/initialized"},
-            headers=self._request_headers(session=True),
-        )
+        # The session counts as open only once the server took the notification; until
+        # then a failure leaves `_session_id` unset, so the next request opens a new one.
+        with transport_errors("notifications/initialized", self._url):
+            notified = await self._http.post(
+                self._url,
+                json={"jsonrpc": "2.0", "method": "notifications/initialized"},
+                headers=self._request_headers(session_id),
+            )
         self._check_status(notified, "notifications/initialized")
+        self._session_id = session_id
         logger.debug("Opened MCP session %s on %s", session_id, self._url)
         return session_id
 
@@ -262,22 +272,24 @@ class McpHttpSession:
             T3McpError: The server answered with a JSON-RPC error.
             T3HttpError: Any other unexpected HTTP status.
             T3ProtocolError: The response could not be read.
+            T3ConnectionError: The server could not be reached, or the request timed out.
         """
         await self._ensure_session()
         for attempt in range(2):
             session_id = self._session_id
             request_id = next(self._ids)
-            response = await self._http.post(
-                self._url,
-                json={
-                    "jsonrpc": "2.0",
-                    "id": request_id,
-                    "method": method,
-                    "params": dict(params or {}),
-                },
-                headers=self._request_headers(session=True),
-                timeout=httpx2.USE_CLIENT_DEFAULT if timeout is None else timeout,
-            )
+            with transport_errors(method, self._url):
+                response = await self._http.post(
+                    self._url,
+                    json={
+                        "jsonrpc": "2.0",
+                        "id": request_id,
+                        "method": method,
+                        "params": dict(params or {}),
+                    },
+                    headers=self._request_headers(self._session_id),
+                    timeout=httpx2.USE_CLIENT_DEFAULT if timeout is None else timeout,
+                )
             if response.status_code == httpx2.codes.NOT_FOUND and attempt == 0:
                 logger.debug("MCP session %s is gone (server restart?); reopening", session_id)
                 await self._ensure_session(stale=session_id)
@@ -327,7 +339,7 @@ class McpHttpSession:
         if self._session_id is None:
             return
         try:
-            await self._http.delete(self._url, headers=self._request_headers(session=True))
+            await self._http.delete(self._url, headers=self._request_headers(self._session_id))
         except httpx2.HTTPError as error:
             logger.debug("Closing MCP session failed: %s", error)
         finally:

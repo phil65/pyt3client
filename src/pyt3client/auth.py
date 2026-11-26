@@ -35,7 +35,7 @@ from urllib.parse import parse_qs, urlsplit
 import httpx2
 from pydantic import ValidationError
 
-from pyt3client.errors import T3AuthError, T3HttpError, T3ProtocolError
+from pyt3client.errors import T3AuthError, T3HttpError, T3ProtocolError, transport_errors
 from pyt3client.models.auth import (
     ApprovalRedirect,
     McpAccess,
@@ -176,6 +176,7 @@ async def pair(
     Raises:
         T3AuthError: The environment rejected the code or the sign-in.
         T3HttpError: The address does not answer like a T3 Code environment.
+        T3ConnectionError: The address could not be reached.
     """
     origin = _normalize_base_url(base_url)
     code = pairing_code.strip()
@@ -263,8 +264,9 @@ async def pair(
 @asynccontextmanager
 async def _client_scope(client: httpx2.AsyncClient | None) -> AsyncGenerator[httpx2.AsyncClient]:
     """Use a caller's httpx2 client, or own a short-lived one for the duration."""
-    if client is not None:
-        yield client
-        return
-    async with httpx2.AsyncClient(timeout=30) as owned:
-        yield owned
+    with transport_errors("T3 Code request"):
+        if client is not None:
+            yield client
+            return
+        async with httpx2.AsyncClient(timeout=30) as owned:
+            yield owned

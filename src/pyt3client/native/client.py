@@ -19,7 +19,7 @@ from uuid import uuid4
 import httpx2
 from pydantic import BaseModel, JsonValue, SecretStr
 
-from pyt3client.errors import T3AuthError, T3HttpError, T3ProtocolError
+from pyt3client.errors import T3AuthError, T3HttpError, T3ProtocolError, transport_errors
 from pyt3client.models.auth import T3NativeCredentials
 from pyt3client.native.models import parse_shell_stream_item, parse_stream_item
 from pyt3client.native.rpc import RpcSocket
@@ -79,6 +79,7 @@ async def sign_in_native(
 
     Raises:
         T3AuthError: The pairing token was refused (used, expired or revoked).
+        T3ConnectionError: The environment could not be reached.
     """
     origin = _origin(base_url)
     form = {
@@ -91,8 +92,9 @@ async def sign_in_native(
     }
     if scopes:
         form["scope"] = " ".join(scopes)
-    async with _client(http_client) as client:
-        response = await client.post(f"{origin}/oauth/token", data=form)
+    with transport_errors("native sign-in"):
+        async with _client(http_client) as client:
+            response = await client.post(f"{origin}/oauth/token", data=form)
     if response.status_code in (httpx2.codes.BAD_REQUEST, httpx2.codes.UNAUTHORIZED):
         msg = f"the pairing token was refused: {response.text[:300]}"
         raise T3AuthError(msg)
@@ -115,14 +117,16 @@ async def websocket_url(
 
     Raises:
         T3AuthError: The bearer was refused (revoked, expired, or an MCP token).
+        T3ConnectionError: The environment could not be reached.
     """
     origin = _origin(base_url)
     headers = {
         "authorization": f"Bearer {access_token}",
         "x-t3-orchestration-protocol": str(ORCHESTRATION_PROTOCOL),
     }
-    async with _client(http_client) as client:
-        response = await client.post(f"{origin}/api/auth/websocket-ticket", headers=headers)
+    with transport_errors("websocket ticket"):
+        async with _client(http_client) as client:
+            response = await client.post(f"{origin}/api/auth/websocket-ticket", headers=headers)
     if response.status_code == httpx2.codes.UNAUTHORIZED:
         msg = (
             "the environment refused the native credential: it may be revoked or expired,"
