@@ -8,6 +8,7 @@ can read it can act on those environments at the approved access level until the
 token expires (30 days) or is revoked in T3 Code under Settings -> Sharing & access.
 """
 
+from contextlib import contextmanager
 from datetime import UTC, datetime
 import os
 from pathlib import Path
@@ -22,7 +23,7 @@ from pyt3client.models.auth import T3Credentials, T3NativeCredentials
 
 
 if TYPE_CHECKING:
-    from collections.abc import Mapping
+    from collections.abc import Generator, Mapping
 
 
 STORE_VERSION = 1
@@ -105,20 +106,85 @@ def _entries(
     return entries
 
 
+@contextmanager
+def _locked() -> Generator[None]:
+    """Hold an exclusive lock on `credentials.json.lock` (across processes).
+
+    Every read-modify-write of the store holds it, so concurrent sign-ins don't
+    overwrite each other. No-op where `flock` is missing (Windows).
+    """
+    try:
+        import fcntl
+    except ImportError:
+        yield
+        return
+    path = credentials_path()
+    path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+    lock_path = path.with_name(path.name + ".lock")
+    descriptor = os.open(lock_path, os.O_RDWR | os.O_CREAT, 0o600)
+    try:
+        fcntl.flock(descriptor, fcntl.LOCK_EX)
+        yield
+    finally:
+        os.close(descriptor)  # releases the lock
+
+
 def save(environments: Mapping[str, T3Credentials]) -> Path:
-    """Replace the saved MCP sign-ins (native ones stay); the file has mode 0600."""
-    stored = _read()
-    return _write(
-        _StoreFile(version=STORE_VERSION, environments=_entries(environments), native=stored.native)
-    )
+    """Replace the saved MCP sign-ins (native ones stay); the file has mode 0600.
+
+    To add or remove one sign-in, use `update`: it doesn't lose concurrent ones.
+    """
+    with _locked():
+        stored = _read()
+        store = _StoreFile(
+            version=STORE_VERSION, environments=_entries(environments), native=stored.native
+        )
+        return _write(store)
 
 
 def save_native(native: Mapping[str, T3NativeCredentials]) -> Path:
-    """Replace the saved native sign-ins (MCP ones stay)."""
-    stored = _read()
-    return _write(
-        _StoreFile(version=STORE_VERSION, environments=stored.environments, native=_entries(native))
-    )
+    """Replace the saved native sign-ins (MCP ones stay); see `update_native`."""
+    with _locked():
+        stored = _read()
+        store = _StoreFile(
+            version=STORE_VERSION, environments=stored.environments, native=_entries(native)
+        )
+        return _write(store)
+
+
+def update(alias: str, credentials: T3Credentials | None) -> Path:
+    """Save (or with None, forget) the MCP sign-in of one alias; the others stay."""
+    with _locked():
+        stored = _read()
+        environments = dict(stored.environments)
+        if credentials is None:
+            environments.pop(alias, None)
+        else:
+            environments |= _entries({alias: credentials})
+        return _write(
+            stored.model_copy(
+                update={
+                    "version": STORE_VERSION,
+                    "environments": dict(sorted(environments.items())),
+                }
+            )
+        )
+
+
+def update_native(alias: str, credentials: T3NativeCredentials | None) -> Path:
+    """Save (or with None, forget) the native sign-in of one alias; the others stay."""
+    with _locked():
+        stored = _read()
+        native = dict(stored.native)
+        if credentials is None:
+            native.pop(alias, None)
+        else:
+            native |= _entries({alias: credentials})
+        return _write(
+            stored.model_copy(
+                update={"version": STORE_VERSION, "native": dict(sorted(native.items()))}
+            )
+        )
 
 
 def _write(store: _StoreFile) -> Path:

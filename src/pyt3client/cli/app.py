@@ -398,15 +398,13 @@ def login(
 
     try:
         alias, credentials = asyncio.run(go())
-        environments = store.load()
+        path = store.update(alias, credentials)
     except T3AuthError as error:
         _fail(f"auth: {error}")
     except (T3Error, httpx2.HTTPError) as error:
         _fail(f"cannot sign in at {url}: {error}")
     except store.StoreError as error:
         _fail(str(error))
-    environments[alias] = credentials
-    path = store.save(environments)
     if as_json:
         _echo_json({"alias": alias, "path": str(path)} | _env_summary(credentials))
         return
@@ -459,15 +457,13 @@ def login_native(
 
     try:
         alias, credentials = asyncio.run(go())
-        native = store.load_native()
+        path = store.update_native(alias, credentials)
     except T3AuthError as error:
         _fail(f"auth: {error}")
     except (T3Error, httpx2.HTTPError) as error:
         _fail(f"cannot sign in at {url}: {error}")
     except store.StoreError as error:
         _fail(str(error))
-    native[alias] = credentials
-    path = store.save_native(native)
     if as_json:
         summary: dict[str, JsonValue] = {
             "alias": alias,
@@ -494,15 +490,11 @@ def logout(
     """Forget a saved sign-in. Revoke it in T3 Code under Settings -> Sharing & access."""
     runtime = _runtime(ctx)
     try:
-        environments = store.load()
-        chosen, _ = store.select(environments, alias or runtime.env)
+        chosen, _ = store.select(store.load(), alias or runtime.env)
+        store.update(chosen, None)
+        store.update_native(chosen, None)
     except store.StoreError as error:
         _fail(str(error))
-    del environments[chosen]
-    store.save(environments)
-    native = store.load_native()
-    if native.pop(chosen, None) is not None:
-        store.save_native(native)
     typer.echo(f"Forgot {chosen}. The token stays valid until revoked in T3 Code.")
 
 

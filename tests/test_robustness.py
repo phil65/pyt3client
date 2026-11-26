@@ -4,6 +4,7 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
 import json
 import sys
+import time
 from typing import TYPE_CHECKING
 
 import httpx2
@@ -132,3 +133,53 @@ def test_concurrent_credential_writes(tmp_path: Path, monkeypatch: pytest.Monkey
     saved = credentials.load()
     assert len(saved) == 1
     assert not list(credentials.credentials_path().parent.glob("*.tmp"))
+
+
+@pytest.mark.skipif(
+    sys.platform == "win32", reason="Windows refuses concurrent renames onto one file"
+)
+def test_concurrent_sign_ins_are_all_kept(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Concurrent `update`s (MCP and native) don't overwrite each other's sign-ins."""
+    from pyt3client import credentials
+    from pyt3client.models.auth import T3Credentials, T3NativeCredentials
+
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
+    real_read = credentials._read
+
+    def slow_read() -> object:
+        stored = real_read()
+        time.sleep(0.01)  # widen the read-modify-write window
+        return stored
+
+    monkeypatch.setattr(credentials, "_read", slow_read)
+
+    def sign_in(i: int) -> None:
+        if i % 2:
+            native = T3NativeCredentials(
+                base_url=f"http://host{i}.test",
+                access_token="n",
+                expires_at=datetime.now(UTC),
+                scopes=(),
+            )
+            credentials.update_native(f"env{i}", native)
+        else:
+            creds = T3Credentials(
+                base_url=f"http://host{i}.test",
+                environment_id=f"env-{i}",
+                access_token="x",
+                expires_at=datetime.now(UTC),
+                scopes=("orchestration:read",),
+                access="read-only",
+                client_id="c",
+            )
+            credentials.update(f"env{i}", creds)
+
+    with ThreadPoolExecutor(8) as pool:
+        list(pool.map(sign_in, range(16)))
+    assert sorted(credentials.load()) == sorted(f"env{i}" for i in range(0, 16, 2))
+    assert sorted(credentials.load_native()) == sorted(f"env{i}" for i in range(1, 16, 2))
+
+    credentials.update("env0", None)
+    credentials.update_native("env1", None)
+    assert "env0" not in credentials.load()
+    assert "env1" not in credentials.load_native()
