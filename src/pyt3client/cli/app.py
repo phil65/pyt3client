@@ -872,13 +872,17 @@ def pending(
             PENDING_REQUEST, PendingRequestInput(action="list", thread_id=thread)
         )
         request_ids = _string_list(listed.root, "requestIds")
-        requests: list[JsonValue] = []
-        for request_id in request_ids:
-            read = await t3.call(
-                PENDING_REQUEST,
-                PendingRequestInput(action="read", thread_id=thread, request_id=request_id),
+        # The session is safe for concurrent calls; gather keeps the listed order.
+        reads = await asyncio.gather(
+            *(
+                t3.call(
+                    PENDING_REQUEST,
+                    PendingRequestInput(action="read", thread_id=thread, request_id=request_id),
+                )
+                for request_id in request_ids
             )
-            requests.append(read.root)
+        )
+        requests: list[JsonValue] = [read.root for read in reads]
         if as_json:
             _echo_json(requests)
             return EXIT_OK
