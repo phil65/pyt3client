@@ -17,8 +17,6 @@ isolated server and mint a code for it:
 The pairing code is single use; the module signs in once.
 """
 
-from __future__ import annotations
-
 import json
 import os
 from pathlib import Path

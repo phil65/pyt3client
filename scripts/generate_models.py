@@ -27,8 +27,6 @@ Run against an isolated server, never your live install, for example:
 with `t3 auth pairing create --base-dir /tmp/t3home --json`.
 """
 
-from __future__ import annotations
-
 import argparse
 import ast
 import json

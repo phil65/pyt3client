@@ -14,8 +14,6 @@ async with T3NativeClient.from_credentials(credentials) as t3:
 ```
 """
 
-from __future__ import annotations
-
 from pyt3client.native.client import T3NativeClient, sign_in_native, websocket_url
 from pyt3client.native.models import (
     ApprovalDecision,

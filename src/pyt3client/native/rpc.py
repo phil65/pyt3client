@@ -15,8 +15,6 @@ Methods (`tag`) and their payloads are in upstream `packages/contracts/src/rpc.t
 and `orchestrationV2.ts` (`ORCHESTRATION_V2_WS_METHODS`).
 """
 
-from __future__ import annotations
-
 import asyncio
 from contextlib import asynccontextmanager, suppress
 from dataclasses import dataclass

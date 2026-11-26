@@ -4,8 +4,6 @@ Upstream schemas live in packages/contracts/src/auth.ts
 (https://github.com/pingdotgg/t3code); names are noted per model.
 """
 
-from __future__ import annotations
-
 from datetime import datetime
 from typing import Literal
 

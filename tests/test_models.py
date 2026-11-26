@@ -1,7 +1,5 @@
 """The generated models must match the wire names in the committed schema snapshot."""
 
-from __future__ import annotations
-
 import json
 from pathlib import Path
 from typing import TYPE_CHECKING, Any

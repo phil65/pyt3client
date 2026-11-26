@@ -1,7 +1,5 @@
 """Headless MCP sign-in against a fake environment that checks the OAuth flow."""
 
-from __future__ import annotations
-
 import base64
 from dataclasses import dataclass, field
 import hashlib

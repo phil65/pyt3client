@@ -9,8 +9,6 @@ then needs a short-lived ticket from `POST /api/auth/websocket-ticket` and opens
 `t3 auth pairing create` or Settings -> Sharing & access in T3 Code.
 """
 
-from __future__ import annotations
-
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Self
 from urllib.parse import quote

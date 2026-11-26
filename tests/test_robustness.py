@@ -1,7 +1,5 @@
 """Session setup failures, transport errors and concurrent credential writes."""
 
-from __future__ import annotations
-
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
 import json

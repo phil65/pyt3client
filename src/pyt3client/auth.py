@@ -21,8 +21,6 @@ Get a pairing code on the host with `t3 auth pairing create`, or in the app via
 Settings -> Sharing & access.
 """
 
-from __future__ import annotations
-
 import base64
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime, timedelta

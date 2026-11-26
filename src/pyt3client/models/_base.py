@@ -1,7 +1,5 @@
 """Base class for the generated tool models."""
 
-from __future__ import annotations
-
 from pydantic import BaseModel, ConfigDict
 from pydantic.alias_generators import to_camel
 

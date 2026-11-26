@@ -1,7 +1,5 @@
 """T3Client against the in-memory fake `/mcp` server from conftest."""
 
-from __future__ import annotations
-
 from typing import TYPE_CHECKING, Any
 
 import pytest

@@ -8,8 +8,6 @@ can read it can act on those environments at the approved access level until the
 token expires (30 days) or is revoked in T3 Code under Settings -> Sharing & access.
 """
 
-from __future__ import annotations
-
 from datetime import UTC, datetime
 import os
 from pathlib import Path

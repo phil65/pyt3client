@@ -9,8 +9,6 @@ Exit codes follow upstream `t3 thread ... --wait`: 0 when the run completed,
 agent waits for an answer or approval, and 3 when `--timeout` ran out first.
 """
 
-from __future__ import annotations
-
 import asyncio
 from dataclasses import dataclass
 import json

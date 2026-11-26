@@ -1,7 +1,5 @@
 """The `pyt3` CLI against the in-memory fake `/mcp` server from conftest."""
 
-from __future__ import annotations
-
 from datetime import UTC, datetime, timedelta
 import json
 import os

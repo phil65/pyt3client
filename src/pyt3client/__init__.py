@@ -15,8 +15,6 @@ async with T3Client.from_credentials(credentials) as t3:
 ```
 """
 
-from __future__ import annotations
-
 from importlib.metadata import version
 
 from pyt3client.auth import fetch_descriptor, pair

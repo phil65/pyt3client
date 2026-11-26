@@ -1,7 +1,5 @@
 """The public descriptor every T3 Code environment serves without authentication."""
 
-from __future__ import annotations
-
 from pydantic import BaseModel, ConfigDict, Field, JsonValue
 
 

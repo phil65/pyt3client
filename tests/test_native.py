@@ -1,7 +1,5 @@
 """The native surface: sign-in over HTTP, Effect RPC over a (fake) WebSocket server."""
 
-from __future__ import annotations
-
 import asyncio
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field

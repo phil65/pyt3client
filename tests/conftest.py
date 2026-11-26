@@ -1,7 +1,5 @@
 """Test helpers: an in-memory stand-in for a T3 Code environment's HTTP surface."""
 
-from __future__ import annotations
-
 from dataclasses import dataclass, field
 import json
 from typing import TYPE_CHECKING, Any

@@ -16,8 +16,6 @@ own client for linked environments, apps/server/src/peer/PeerMcpClient.ts
   none by default.
 """
 
-from __future__ import annotations
-
 import asyncio
 from itertools import count
 import json

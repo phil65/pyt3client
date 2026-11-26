@@ -14,8 +14,6 @@ Upstream (`packages/contracts/src/orchestrationV2.ts`):
   question the provider waits on; answer it with `runtime-request.respond`.
 """
 
-from __future__ import annotations
-
 from typing import Literal
 
 from pydantic import ConfigDict, Field, JsonValue

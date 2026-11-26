@@ -6,8 +6,6 @@ input and output models. `T3Client.call` takes one, so calls are type-checked
 end to end without hand-written signatures for each of the ~50 tools.
 """
 
-from __future__ import annotations
-
 from dataclasses import dataclass
 
 from pydantic import BaseModel, JsonValue, RootModel
